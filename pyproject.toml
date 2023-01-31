@@ -5,6 +5,10 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "dremio_simple_query"
 version = "0.0.1"
+dependencies = [
+  'duckdb >= 0.6.1',
+  'pyarrow >= 11.0.0'
+]
 authors = [
   { name="Alex Merced", email="alex.merced@dremio.com" },
 ]
@@ -18,5 +22,5 @@ classifiers = [
 ]
 
 [project.urls]
-"Homepage" = "https://github.com/pypa/sampleproject"
-"Bug Tracker" = "https://github.com/pypa/sampleproject/issues"
+"Homepage" = "https://github.com/developer-advocacy-dremio/dremio_simple_query"
+"Bug Tracker" = "https://github.com/developer-advocacy-dremio/dremio_simple_query/issues"

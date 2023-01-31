@@ -24,7 +24,7 @@ class DremioConnection:
         ## Get ticket to for query execution, used to get results
         flight_info = client.get_flight_info(flight.FlightDescriptor.for_command(query), options)
     
-        ## Get Results 
+        ## Get Results (Return Value a FlightStreamReader)
         results = client.do_get(flight_info.endpoints[0].ticket, options)
         return results
         

@@ -1,0 +1,13 @@
+Metadata-Version: 2.1
+Name: dremio-simple-query
+Version: 0.0.1
+Summary: Simple tool to query Dremio with Apache Arrow Flight
+Author-email: Alex Merced <alex.merced@dremio.com>
+Project-URL: Homepage, https://github.com/developer-advocacy-dremio/dremio_simple_query
+Project-URL: Bug Tracker, https://github.com/developer-advocacy-dremio/dremio_simple_query/issues
+Classifier: Programming Language :: Python :: 3
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Requires-Python: >=3.7
+Description-Content-Type: text/markdown
+License-File: LICENSE
