@@ -10,7 +10,45 @@ Use Dremio to Help:
 - Accelerate your queries across data sources
 - Reduce your Data Warehouse Workloads
 
-With this library your analysts can more easily get their data from Dremio and easily get to work running local analytics with Arrow and DuckDB. This library can grab large datasets performantly thanks to using Apache Arrow Flight.
+With this library your analysts can more easily get their data from Dremio and easily get to work running local analytics with Arrow, Pandas, Polars and DuckDB. This library can grab large datasets performantly thanks to using Apache Arrow Flight.
+
+## Getting Your URI and Token
+
+| | Protocol | Endpoint | Result|
+|-|----------|----------|-------|
+|Dremio Cloud (NA)| grpc+tls:// | data.dremio.cloud:443| grpc+tls://data.dremio.cloud:443|
+|Dremio Cloud (EU)| grpc+tls:// | data.eu.dremio.cloud:443| grpc+tls://data.eu.dremio.cloud:443|
+|Dremio Software (SSL)| grpc+tls:// | `<ip-address>`:32010| grpc+tls://`<ip-address>`:32010|
+|Dremio Software (NoSSL)| grpc:// | `<ip-address>`:32010| grpc://`<ip-address>`:32010|
+
+Getting your token
+
+- For Dremio Cloud can get token from interface or REST API
+- For Dremio Software can get token from Rest API
+
+The get_token function is included to help get the token from the Dremio Rest API.
+
+```py
+from dremio_simple_query.connect import get_token, DremioConnection
+
+## URL to Login Endpoint
+login_endpoint = "http://localhost:9047/apiv2/login"
+
+## Payload for Login
+payload = {
+    "userName": username,
+    "password": password
+}
+
+## Get token from API
+token = get_token(uri = login_endpoint, payload=payload)
+
+## URL Dremio Software Flight Endpoint
+arrow_endpoint="grpc://localhost:32010"
+
+## Establish Client
+dremio = DremioConnection(token, arrow_endpoint)
+```
 
 #### Setting up your connection
 
@@ -52,9 +90,16 @@ arrow_table = stream.read_all()
 batch_reader = stream.to_reader()
 ```
 
-**Pandas Dataframe**
+#### toPandas (Get Pandas Dataframe Back)
+
 ```py
-df = stream.read_pandas()
+df = dremio.toPandas("SELECT * FROM arctic.table1;")
+```
+
+#### toPolars (Get Polars Dataframe Back)
+
+```py
+df = dremio.toPolars("SELECT * FROM arctic.table1;")
 ```
 
 ## Querying with DuckDB
@@ -106,3 +151,4 @@ results = con.execute("SELECT * FROM my_table;").fetchall()
 
 print(results)
 ```
+

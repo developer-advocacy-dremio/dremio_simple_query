@@ -1,5 +1,6 @@
 LICENSE
 pyproject.toml
+readme.md
 src/dremio_simple_query/__init__.py
 src/dremio_simple_query/connect.py
 src/dremio_simple_query.egg-info/PKG-INFO
