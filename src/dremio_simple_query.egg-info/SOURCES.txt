@@ -3,8 +3,11 @@ pyproject.toml
 readme.md
 src/dremio_simple_query/__init__.py
 src/dremio_simple_query/connect.py
+src/dremio_simple_query/connectv2.py
 src/dremio_simple_query.egg-info/PKG-INFO
 src/dremio_simple_query.egg-info/SOURCES.txt
 src/dremio_simple_query.egg-info/dependency_links.txt
 src/dremio_simple_query.egg-info/requires.txt
 src/dremio_simple_query.egg-info/top_level.txt
+tests/test_connectv2.py
+tests/test_live.py
