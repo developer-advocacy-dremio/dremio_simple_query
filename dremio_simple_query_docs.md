@@ -12,143 +12,135 @@ Use Dremio to Help:
 
 With this library your analysts can more easily get their data from Dremio and easily get to work running local analytics with Arrow, Pandas, Polars and DuckDB. This library can grab large datasets performantly thanks to using Apache Arrow Flight.
 
-## Getting Your URI and Token
+---
+
+## 🚀 Recommended: Use the V2 Client (`dremio_simple_query.connectv2`)
+
+The V2 client is the modern, robust implementation designed for stability and advanced features, especially for Dremio Cloud.
+
+### Why use V2?
+
+| Feature | V1 (`connect.py`) | V2 (`connectv2.py`) |
+| :--- | :--- | :--- |
+| **Authentication** | Token Only | **Token OR Username/Password** (Auto-Handshake) |
+| **Dremio Cloud** | Basic Support | **Robust Support** (Session Persistence via Cookies) |
+| **Project Context** | Default Project Only | **Multi-Project Support** (Route via `project_id`) |
+| **Code Quality** | Basic | **Type Hinted & Docstringed** |
+
+### V2 Quick Start
+
+```python
+from dremio_simple_query.connectv2 import DremioConnection
+from os import getenv
+from dotenv import load_dotenv
+
+load_dotenv()
+
+# Option 1: Authenticate with PAT (Personal Access Token)
+dremio = DremioConnection(
+    location=getenv("ARROW_ENDPOINT"), # e.g., grpc+tls://data.dremio.cloud:443
+    token=getenv("DREMIO_TOKEN"),
+    project_id=getenv("DREMIO_PROJECT_ID") # Optional: Specify Project ID context
+)
+
+# Option 2: Authenticate with Username/Password (Software Only)
+# Performs automatic Arrow Flight Handshake
+dremio_auth = DremioConnection(
+    location="grpc+tls://dremio.company.com:32010",
+    username="my_user",
+    password="my_password"
+)
+
+# Query Data (Returns FlightStreamReader)
+stream = dremio.toArrow("SELECT * FROM star_wars.battles")
+
+# Convert to your favorite format
+df_pandas = dremio.toPandas("SELECT * FROM star_wars.battles")
+df_polars = dremio.toPolars("SELECT * FROM star_wars.battles")
+duck_rel  = dremio.toDuckDB("SELECT * FROM star_wars.battles")
+```
+
+---
+
+## Legacy: Use the V1 Client (`dremio_simple_query.connect`)
+
+The original client is maintained for backward compatibility. It is lighter but lacks session persistence features required for stable Dremio Cloud routing.
+
+```python
+from dremio_simple_query.connect import DremioConnection
+
+# Authenticate with Token Only
+dremio = DremioConnection(token="MY_TOKEN", location="grpc+tls://data.dremio.cloud:443")
+
+# Query
+stream = dremio.toArrow("SELECT 1")
+```
+
+---
+
+## Detailed Usage Guide
+
+### Getting Your URI and Token
 
 | | Protocol | Endpoint | Result|
-|-|----------|----------|-------|
+|---|----------|----------|-------|
 |Dremio Cloud (NA)| grpc+tls:// | data.dremio.cloud:443| grpc+tls://data.dremio.cloud:443|
 |Dremio Cloud (EU)| grpc+tls:// | data.eu.dremio.cloud:443| grpc+tls://data.eu.dremio.cloud:443|
 |Dremio Software (SSL)| grpc+tls:// | `<ip-address>`:32010| grpc+tls://`<ip-address>`:32010|
 |Dremio Software (NoSSL)| grpc:// | `<ip-address>`:32010| grpc://`<ip-address>`:32010|
 
-Getting your token
+#### Getting your token (V1 helper)
+The `get_token` helper is available in v1 to fetch a token via REST API if you don't use the V2 handshake.
 
-- For Dremio Cloud can get token from interface or REST API
-- For Dremio Software can get token from Rest API
+```python
+from dremio_simple_query.connect import get_token
 
-The get_token function is included to help get the token from the Dremio Rest API.
-
-```py
-from dremio_simple_query.connect import get_token, DremioConnection
-
-## URL to Login Endpoint
 login_endpoint = "http://localhost:9047/apiv2/login"
-
-## Payload for Login
-payload = {
-    "userName": username,
-    "password": password
-}
-
-## Get token from API
-token = get_token(uri = login_endpoint, payload=payload)
-
-## URL Dremio Software Flight Endpoint
-arrow_endpoint="grpc://localhost:32010"
-
-## Establish Client
-dremio = DremioConnection(token, arrow_endpoint)
+payload = {"userName": username, "password": password}
+token = get_token(uri=login_endpoint, payload=payload)
 ```
 
-#### Setting up your connection
-
-```py
-from dremio_simple_query.connect import DremioConnection
-from os import getenv
-from dotenv import load_dotenv
-
-load_dotenv()
-
-## Dremio Person Token
-token = getenv("TOKEN")
-
-## Arrow Endpoint (See Dremio Documentation)
-uri = getenv("ARROW_ENDPOINT")
-
-## Create Dremio Arrow Connection
-dremio = DremioConnection(token, uri)
-```
-
-#### Query (Get Arrow Back)
-
-If you want to get Arrow Data back you can run a query like so.
-
-```py
-
-stream = dremio.toArrow("SELECT * FROM arctic.table1;")
-```
+### Data Conversion Methods (Both V1 & V2)
 
 The `.toArrow` method returns a `FlightStreamReader` object which can be converted into typical Arrow objects.
 
 **Arrow Table**
-```py
+```python
 arrow_table = stream.read_all()
 ```
 
 **Arrow RecordBatchReader**
-```py
+```python
 batch_reader = stream.to_reader()
 ```
 
-#### toPandas (Get Pandas Dataframe Back)
-
-```py
+**toPandas**
+```python
 df = dremio.toPandas("SELECT * FROM arctic.table1;")
 ```
 
-#### toPolars (Get Polars Dataframe Back)
-
-```py
+**toPolars**
+```python
 df = dremio.toPolars("SELECT * FROM arctic.table1;")
 ```
 
-## Querying with DuckDB
+### Querying with DuckDB
 
-#### Using the DuckDB Relation API
-
-Using the `.toDuckDB` method the query results will be returned as a DuckDB relation.
-
-```py
+**Using the DuckDB Relation API**
+```python
 duck_rel = dremio.toDuckDB("SELECT * FROM arctic.table1")
-
 result = duck_rel.query("table1", "SELECT * from table1").fetchall()
-
-result2 = duck_rel.filter
-
-print(result)
 ```
 
-#### Querying Arrow Objects with DuckDB
-
-```py
-from dremio_simple_query.connect import DremioConnection
-from os import getenv
-from dotenv import load_dotenv
+**Querying Arrow Objects with DuckDB**
+```python
 import duckdb
 
-## DuckDB Connection
 con = duckdb.connection()
-
-load_dotenv()
-
-## Dremio Person Token
-token = getenv("TOKEN")
-
-## Arrow Endpoint (See Dremio Documentation)
-uri = getenv("ARROW_ENDPOINT")
-
-## Create Dremio Arrow Connection
-dremio = DremioConnection(token, uri)
-
-## Get Data from Dremio
 stream = dremio.toArrow("SELECT * FROM arctic.table1;")
-
-## Turn into Arrow Table
 my_table = stream.read_all()
 
-## Query with Duckdb
+# Zero-copy query against Arrow table
 results = con.execute("SELECT * FROM my_table;").fetchall()
-
 print(results)
 ```
-
