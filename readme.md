@@ -12,6 +12,19 @@ Use Dremio to Help:
 
 With this library your analysts can more easily get their data from Dremio and easily get to work running local analytics with Arrow, Pandas, Polars and DuckDB. This library can grab large datasets performantly thanks to using Apache Arrow Flight.
 
+[**FULL DOCUMENTATION**](docs/dremio_simple_query_docs.md)
+
+## New Feature: Connection Profiles
+
+Manage authentications easily with `~/.dremio/profiles.yaml`.
+
+```python
+from dremio_simple_query.connectv2 import DremioConnection
+
+# Connect using a pre-configured profile
+dremio = DremioConnection(profile="my_cloud_profile")
+```
+
 ---
 
 ## 🚀 Recommended: Use the V2 Client (`dremio_simple_query.connectv2`)

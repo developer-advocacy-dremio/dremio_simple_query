@@ -1,3 +1,5 @@
+<!-- Source: docs/dremio_simple_query_docs.md -->
+
 ## dremio_simple_query
 
 The purpose of this library is to easily query a Dremio source using Arrow Flight for analytics.

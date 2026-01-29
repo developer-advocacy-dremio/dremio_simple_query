@@ -62,11 +62,12 @@ class DremioConnection:
     """
     
     def __init__(self, 
-                 location: str, 
+                 location: Optional[str] = None, 
                  token: Optional[str] = None, 
                  username: Optional[str] = None, 
                  password: Optional[str] = None,
-                 project_id: Optional[str] = None):
+                 project_id: Optional[str] = None,
+                 profile: Optional[str] = None):
         """
         Initialize the Dremio Connection.
 
@@ -76,10 +77,30 @@ class DremioConnection:
             username (Optional[str]): Dremio username (for Basic Auth Handshake).
             password (Optional[str]): Dremio password (for Basic Auth Handshake).
             project_id (Optional[str]): Dremio Cloud Project ID.
+            profile (Optional[str]): Name of the profile to use from ~/.dremio/profiles.yaml.
         
         Raises:
             ValueError: If neither token nor (username and password) are provided.
         """
+        
+        # If profile is specified, load details from ~/.dremio/profiles.yaml
+        if profile:
+            details = self._load_profile(profile)
+            # Override/Set values if they weren't provided in the arguments
+            if not location and details.get("location"):
+                location = details["location"]
+            if not token and details.get("token"):
+                token = details["token"]
+            if not username and details.get("username"):
+                username = details["username"]
+            if not password and details.get("password"):
+                password = details["password"]
+            if not project_id and details.get("project_id"):
+                project_id = details["project_id"]
+
+        if not location:
+            raise ValueError("Must provide 'location' or a 'profile' with a valid endpoint derivation.")
+
         self.location = location
         self.project_id = project_id
         
@@ -106,12 +127,111 @@ class DremioConnection:
                 raise ConnectionError(f"Failed to authenticate with username/password: {e}")
         
         if not self.token:
-            raise ValueError("Must provide either 'token' or 'username' and 'password'.")
+            raise ValueError("Must provide either 'token' or 'username' and 'password' (directly or via profile).")
 
         # Construct Headers
         self.headers = [
             (b"authorization", f"Bearer {self.token}".encode("utf-8"))
         ]
+
+    def _load_profile(self, profile_name: str) -> dict:
+        """
+        Load profile configuration from ~/.dremio/profiles.yaml.
+        
+        Args:
+            profile_name (str): The name of the profile to load.
+            
+        Returns:
+            dict: Dictionary containing connection details (location, token/user/pass, project_id).
+        """
+        import os
+        import yaml
+        
+        home = os.path.expanduser("~")
+        profile_path = os.path.join(home, ".dremio", "profiles.yaml")
+        
+        if not os.path.exists(profile_path):
+            raise FileNotFoundError(f"Profile config not found at {profile_path}")
+            
+        try:
+            with open(profile_path, 'r') as f:
+                config = yaml.safe_load(f)
+        except Exception as e:
+            raise ValueError(f"Failed to parse {profile_path}: {e}")
+            
+        profiles = config.get("profiles", {})
+        
+        # Handle 'default_profile' if implied or explicitly requested
+        if profile_name == "default" and "default_profile" in config:
+             profile_name = config["default_profile"]
+             
+        if profile_name not in profiles:
+             raise ValueError(f"Profile '{profile_name}' not found in {profile_path}")
+             
+        profile_data = profiles[profile_name]
+        return self._derive_connection_details(profile_data)
+
+    def _derive_connection_details(self, profile_data: dict) -> dict:
+        """
+        Derive DremioConnection arguments from raw profile data.
+        
+        Args:
+            profile_data (dict): The raw dictionary from the yaml profile.
+            
+        Returns:
+            dict: A dictionary with keys: location, token, username, password, project_id.
+        """
+        details = {}
+        
+        # 1. Extract Project ID, Username, Password, Token
+        details["project_id"] = profile_data.get("project_id")
+        
+        auth = profile_data.get("auth", {})
+        auth_type = auth.get("type")
+        
+        if auth_type == "pat":
+            details["token"] = auth.get("token")
+        elif auth_type == "username_password":
+            details["username"] = auth.get("username")
+            details["password"] = auth.get("password")
+            
+        # 2. Derive Location (Arrow Flight Endpoint)
+        base_url = profile_data.get("base_url", "")
+        is_ssl = str(profile_data.get("ssl", "true")).lower() == "true"
+        
+        # Derive scheme
+        scheme = "grpc+tls" if is_ssl else "grpc"
+        
+        # Derive host and port
+        if "api.dremio.cloud" in base_url or "data.dremio.cloud" in base_url:
+            # Cloud
+            if "eu.dremio.cloud" in base_url:
+                 # EU Cloud
+                 host = "data.eu.dremio.cloud"
+            else:
+                 # NA Cloud
+                 host = "data.dremio.cloud"
+            port = "443"
+        else:
+             # Software
+             # Remove http:// or https://
+             clean_url = base_url.replace("https://", "").replace("http://", "")
+             # Split off path if present
+             clean_url = clean_url.split("/")[0]
+             # Check for port in URL
+             if ":" in clean_url:
+                 host = clean_url.split(":")[0]
+                 # We ignore the REST port (9047) and assume Flight port 32010
+                 # If user wants custom flight port, they might need to be more explicit,
+                 # but for now we follow the simple request logic.
+             else:
+                 host = clean_url
+            
+             port = "32010"
+             
+        details["location"] = f"{scheme}://{host}:{port}"
+        
+        return details
         
     def query(self, query: str) -> flight.FlightStreamReader:
         """
