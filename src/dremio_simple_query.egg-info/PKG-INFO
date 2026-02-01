@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: dremio_simple_query
-Version: 1.0.0
+Version: 1.1.0
 Summary: Simple tool to query Dremio with Apache Arrow Flight
 Author-email: Alex Merced <alex.merced@dremio.com>
 Project-URL: Homepage, https://github.com/developer-advocacy-dremio/dremio_simple_query
@@ -16,6 +16,7 @@ Requires-Dist: pyarrow>=22.0.0
 Requires-Dist: requests>=2.32.5
 Requires-Dist: polars>=1.36.1
 Requires-Dist: pandas>=2.3.3
+Requires-Dist: pyyaml>=6.0
 Dynamic: license-file
 
 ## dremio_simple_query
@@ -31,6 +32,19 @@ Use Dremio to Help:
 - Reduce your Data Warehouse Workloads
 
 With this library your analysts can more easily get their data from Dremio and easily get to work running local analytics with Arrow, Pandas, Polars and DuckDB. This library can grab large datasets performantly thanks to using Apache Arrow Flight.
+
+[**FULL DOCUMENTATION**](docs/dremio_simple_query_docs.md)
+
+## New Feature: Connection Profiles
+
+Manage authentications easily with `~/.dremio/profiles.yaml`.
+
+```python
+from dremio_simple_query.connectv2 import DremioConnection
+
+# Connect using a pre-configured profile
+dremio = DremioConnection(profile="my_cloud_profile")
+```
 
 ---
 

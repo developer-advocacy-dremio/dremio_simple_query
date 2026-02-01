@@ -67,20 +67,41 @@ You can manage multiple environments using a `~/.dremio/profiles.yaml` file.
 **Setup `~/.dremio/profiles.yaml`:**
 ```yaml
 profiles:
+  # 1. Cloud with PAT
   my_cloud:
     type: cloud
     base_url: https://api.dremio.cloud
     project_id: 788baab4-3c3b-42da-9f1d-5cc6dc03147d
     auth:
       type: pat
-      token: MY_TOKEN
-  my_software:
+      token: MY_PAT_TOKEN
+
+  # 2. Software with PAT
+  my_software_pat:
+    type: software
+    base_url: https://dremio.company.com
+    auth:
+      type: pat
+      token: MY_PAT_TOKEN
+  
+  # 3. Software with Username/Password
+  my_software_basic:
     type: software
     base_url: https://dremio.company.com
     auth:
       type: username_password
       username: my_user
       password: my_password
+
+  # 4. Software with OAuth Client Credentials
+  my_software_oauth:
+    type: software
+    base_url: https://dremio.company.com
+    auth:
+      type: oauth
+      client_id: MY_CLIENT_ID
+      client_secret: MY_CLIENT_SECRET
+
 default_profile: my_cloud
 ```
 

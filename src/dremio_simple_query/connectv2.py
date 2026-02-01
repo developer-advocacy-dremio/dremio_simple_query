@@ -5,6 +5,7 @@ import duckdb
 import pyarrow.dataset as ds
 import polars as pl
 import pandas as pd
+from dremio_simple_query.config import load_dremio_config
 import requests
 from http.cookies import SimpleCookie
 
@@ -67,67 +68,111 @@ class DremioConnection:
                  username: Optional[str] = None, 
                  password: Optional[str] = None,
                  project_id: Optional[str] = None,
-                 profile: Optional[str] = None):
+                 profile: Optional[str] = None,
+                 client_id: Optional[str] = None,
+                 client_secret: Optional[str] = None,
+                 verify_ssl: bool = True,
+                 hostname_override: Optional[str] = None,
+                 base_url: Optional[str] = None,
+                 scope: Optional[str] = None):
         """
         Initialize the Dremio Connection.
 
         Args:
-            location (str): The Arrow Flight endpoint (e.g., "grpc+tls://data.dremio.cloud:443").
-            token (Optional[str]): A Personal Access Token (PAT).
-            username (Optional[str]): Dremio username (for Basic Auth Handshake).
-            password (Optional[str]): Dremio password (for Basic Auth Handshake).
+            location (str): The Arrow Flight endpoint.
+            token (Optional[str]): PAT or Access Token.
+            username (Optional[str]): Dremio username.
+            password (Optional[str]): Dremio password.
             project_id (Optional[str]): Dremio Cloud Project ID.
             profile (Optional[str]): Name of the profile to use from ~/.dremio/profiles.yaml.
-        
-        Raises:
-            ValueError: If neither token nor (username and password) are provided.
+            client_id (Optional[str]): OAuth Client ID.
+            client_secret (Optional[str]): OAuth Client Secret.
+            verify_ssl (bool): Whether to verify SSL certificates (Default: True).
+            hostname_override (str): Override hostname for SSL validation/SNI.
+            base_url (str): Explicit REST API base URL (override derivation).
+            scope (str): OAuth scope for Client Credentials.
         """
         
         # If profile is specified, load details from ~/.dremio/profiles.yaml
         if profile:
             details = self._load_profile(profile)
             # Override/Set values if they weren't provided in the arguments
-            if not location and details.get("location"):
-                location = details["location"]
-            if not token and details.get("token"):
-                token = details["token"]
-            if not username and details.get("username"):
-                username = details["username"]
-            if not password and details.get("password"):
-                password = details["password"]
-            if not project_id and details.get("project_id"):
-                project_id = details["project_id"]
+            if not location and details.get("location"): location = details["location"]
+            if not token and details.get("token"): token = details["token"]
+            if not username and details.get("username"): username = details["username"]
+            if not password and details.get("password"): password = details["password"]
+            if not project_id and details.get("project_id"): project_id = details["project_id"]
+            if not client_id and details.get("client_id"): client_id = details["client_id"]
+            if not client_secret and details.get("client_secret"): client_secret = details["client_secret"]
 
         if not location:
             raise ValueError("Must provide 'location' or a 'profile' with a valid endpoint derivation.")
 
         self.location = location
         self.project_id = project_id
+        # Use provided base_url or derive it
+        self.base_url = base_url if base_url else self._derive_base_url(location)
         
         # Initialize Flight Client with Cookie Middleware
         self.cookie_factory = CookieFactory()
         
         # Inject project_id as a cookie if provided
-        # This is required for Dremio Cloud to switch context to non-default projects
         if self.project_id:
             self.cookie_factory.cookies['project_id'] = self.project_id
+        
+        # Determine Flight Client Arguments
+        client_kwargs = {
+            "location": location,
+            "middleware": [self.cookie_factory]
+        }
+        
+        # Add SSL Verification options
+        # We need to add verify_ssl to __init__
+        if not verify_ssl:
+            client_kwargs["disable_server_verification"] = True
             
-        self.client = FlightClient(location=(location), middleware=[self.cookie_factory])
+        if hostname_override:
+            client_kwargs["override_hostname"] = hostname_override
+            
+        self.client = FlightClient(**client_kwargs)
         
         # Authentication Logic
         self.token = token
         
-        if not self.token and (username and password):
-            # Perform Handshake to get session token
+        # 1. Client Credentials Flow
+        if client_id and client_secret:
+            try:
+                self.token = self._authenticate_client_credentials(client_id, client_secret, scope)
+            except Exception as e:
+                if not self.token: 
+                    raise ConnectionError(f"Client Credentials Auth failed: {e}")
+
+        # 2. PAT / OAuth Exchange (Cloud Only)
+        elif self.token and "dremio.cloud" in self.location:
+             try:
+                 exchanged = self._exchange_pat_for_oauth(self.token)
+                 if exchanged:
+                     self.token = exchanged
+             except Exception:
+                 pass # Fallback to raw PAT silently (or log warning)
+
+        # 3. Username/Password Handshake (Software)
+        elif not self.token and (username and password):
             try:
                 options, token_pair = self.client.authenticate_basic_token(username, password)
                 if token_pair:
-                    self.token = token_pair.decode("utf-8") if isinstance(token_pair, bytes) else str(token_pair)
+                    raw_token = token_pair.decode("utf-8") if isinstance(token_pair, bytes) else str(token_pair)
+                    # Some implementations return "Bearer <token>", others just "<token>"
+                    # We strip "Bearer " to be safe, as we prepend it later
+                    if raw_token.lower().startswith("bearer "):
+                        self.token = raw_token[7:]
+                    else:
+                        self.token = raw_token
             except Exception as e:
                 raise ConnectionError(f"Failed to authenticate with username/password: {e}")
         
         if not self.token:
-            raise ValueError("Must provide either 'token' or 'username' and 'password' (directly or via profile).")
+            raise ValueError("Must provide 'token', 'client_id'/'client_secret', or 'username'/'password'.")
 
         # Construct Headers
         self.headers = [
@@ -194,6 +239,9 @@ class DremioConnection:
         elif auth_type == "username_password":
             details["username"] = auth.get("username")
             details["password"] = auth.get("password")
+        elif auth_type == "oauth":
+            details["client_id"] = auth.get("client_id")
+            details["client_secret"] = auth.get("client_secret")
             
         # 2. Derive Location (Arrow Flight Endpoint)
         base_url = profile_data.get("base_url", "")
@@ -232,7 +280,81 @@ class DremioConnection:
         details["location"] = f"{scheme}://{host}:{port}"
         
         return details
+
+    def _derive_base_url(self, location: str) -> str:
+        """Helper to guess REST API Base URL from Flight Location."""
+        # location example: grpc+tls://data.dremio.cloud:443
+        # API example: https://api.dremio.cloud
+        clean_loc = location.replace("grpc+tls://", "").replace("grpc://", "")
+        host = clean_loc.split(":")[0]
         
+        if "dremio.cloud" in host:
+            # Cloud: data.dremio.cloud -> api.dremio.cloud
+            if "eu.dremio.cloud" in host:
+                return "https://api.eu.dremio.cloud"
+            return "https://api.dremio.cloud"
+        else:
+            # Software: localhost -> http://localhost:9047 (Guessing default port/scheme)
+            # This is risky, usually Software requires explicit base_url.
+            # We'll default to http + 9047 if not provided?
+            # Actually, we only use REST for PAT exchange/Client Creds.
+            # Software usually accepts handshake, so REST URL might not be needed.
+            return f"http://{host}:9047" 
+
+    def _authenticate_client_credentials(self, client_id: str, client_secret: str, scope: Optional[str] = None) -> str:
+        """Perform OAuth Client Credentials Flow."""
+        url = f"{self.base_url}/oauth/token"
+        
+        # 1. Try Standard Dremio JSON (client_id/secret in body)
+        # Most Dremio instances support this.
+        if not scope: # If scope is explicit, we might assume strict OAuth (Form Data) needed, but let's try JSON first unless we fail.
+            payload = {
+                "grant_type": "client_credentials",
+                "client_id": client_id,
+                "client_secret": client_secret
+            }
+            try:
+                resp = requests.post(url, json=payload, timeout=10)
+                if resp.status_code == 200:
+                    return resp.json()["access_token"]
+            except Exception:
+                pass # Fall through to retry logic
+        
+        # 2. Try Form Data (application/x-www-form-urlencoded) with Scope
+        # Required for strict OAuth servers (like dremio.org)
+        # Default to 'dremio.all' if no scope provided and we are falling back
+        target_scope = scope or "dremio.all"
+        
+        data = {
+            "grant_type": "client_credentials",
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "scope": target_scope
+        }
+        
+        try:
+            resp = requests.post(url, data=data, timeout=10)
+            resp.raise_for_status()
+            return resp.json()["access_token"]
+        except Exception as e:
+            # If both failed, raise error
+            raise ConnectionError(f"OAuth request to {url} failed. Tried JSON and Form-Data with scope '{target_scope}': {e}")
+        
+
+    @classmethod
+    def from_config(cls, profile_name: Optional[str] = None):
+        """
+        Create a DremioConnection instance from a configuration profile.
+        
+        Args:
+            profile_name: Name of the profile in ~/.dremio/profiles.yaml
+        """
+        config = load_dremio_config(profile_name)
+        if not config:
+             raise ValueError(f"Could not load configuration for profile: {profile_name}")
+             
+        return cls(**config)
+
     def query(self, query: str) -> flight.FlightStreamReader:
         """
         Execute a SQL query against Dremio.

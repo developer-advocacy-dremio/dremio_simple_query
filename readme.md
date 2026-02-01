@@ -25,6 +25,44 @@ from dremio_simple_query.connectv2 import DremioConnection
 dremio = DremioConnection(profile="my_cloud_profile")
 ```
 
+**Example `~/.dremio/profiles.yaml`:**
+```yaml
+profiles:
+  # 1. Cloud with PAT
+  my_cloud:
+    type: cloud
+    base_url: https://api.dremio.cloud
+    auth:
+      type: pat
+      token: MY_PAT_TOKEN
+
+  # 2. Software with PAT
+  my_software_pat:
+    type: software
+    base_url: https://dremio.company.com
+    auth:
+      type: pat
+      token: MY_PAT_TOKEN
+
+  # 3. Software with Username/Password
+  my_software_basic:
+    type: software
+    base_url: https://dremio.company.com
+    auth:
+      type: username_password
+      username: my_user
+      password: my_password
+
+  # 4. Software with Client Credentials
+  my_software_oauth:
+    type: software
+    base_url: https://dremio.company.com
+    auth:
+      type: oauth
+      client_id: MY_CLIENT_ID
+      client_secret: MY_CLIENT_SECRET
+```
+
 ---
 
 ## 🚀 Recommended: Use the V2 Client (`dremio_simple_query.connectv2`)
